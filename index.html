@@ -1053,11 +1053,21 @@ function syncRequest(path, init){
     throw new Error('서버에 연결하지 못했어요 (주소·네트워크 확인)');
   });
 }
+function syncHost(u){
+  var m = /^https?:\/\/([^\/]+)/i.exec(String(u || ''));
+  return m ? m[1].toLowerCase() : '';
+}
 function readSyncInputs(){
   var u = $('syncUrl'), p = $('syncPin');
   if(u){
     var v = String(u.value || '').trim().replace(/\/+$/, '');
     if(v && !/^https?:\/\//i.test(v) && /^[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i.test(v)) v = 'https://' + v;
+    // 다른 서버 주소로 바꾸면 이전 서버와의 기록을 초기화
+    if(syncHost(v) && syncHost(v) !== syncHost(syncCfg.url)){
+      syncCfg.lastSyncAt = 0;
+      syncCfg.lastServerAt = 0;
+      syncCfg.syncedHash = '';
+    }
     syncCfg.url = v;
   }
   if(p) syncCfg.pin = String(p.value || '').trim();
@@ -3285,7 +3295,8 @@ document.addEventListener('click', function(e){
     case 'sync-now': readSyncInputs(); syncPush(true); break;
     case 'sync-off':
       if(confirm('노션 동기화를 끌까요? 이 기기의 기록은 그대로 남아요.')){
-        syncCfg.url = ''; syncCfg.pin = ''; savePrefs(); setSyncStatus('off', ''); openSettings(); toast('동기화를 껐어요');
+        syncCfg.url = ''; syncCfg.pin = ''; syncCfg.lastSyncAt = 0; syncCfg.lastServerAt = 0; syncCfg.syncedHash = '';
+        savePrefs(); setSyncStatus('off', ''); openSettings(); toast('동기화를 껐어요');
       }
       break;
     case 'save-settings': saveSettingsFromSheet(); break;
