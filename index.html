@@ -914,7 +914,14 @@ function save(){
   if(syncBooted) schedulePush();
 }
 function saveLocal(stamp){
-  if(stamp !== false && state){ state._savedAt = Date.now(); }
+  if(stamp !== false && state){
+    var h = stateHash(state);
+    if(h !== syncCfg.localHash && !initializing){
+      state._savedAt = Date.now();
+      syncCfg.localHash = h;
+      savePrefs();
+    }
+  }
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
   catch(e){ storageOK = false; }
 }
@@ -929,8 +936,9 @@ function checkStorage(){
 
 /* ============================== 노션 실시간 동기화 ============================== */
 var PREFS_KEY = 'seondung_home_os_prefs_v1';
-var syncCfg = { url:'', pin:'', lastServerAt:0, lastSyncAt:0, sampleDismissed:false };
+var syncCfg = { url:'', pin:'', lastServerAt:0, lastSyncAt:0, sampleDismissed:false, localHash:'', syncedHash:'' };
 var syncBooted = false;
+var initializing = true;   // 첫 화면 그리기 단계: 사용자 수정이 아니므로 _savedAt 을 찍지 않음
 var pumpStatus = 'off';
 var pumpNote = '';
 var pushTimer = null, retryTimer = null, pulling = false, pushing = false, pushQueued = false, localDirty = false, lastPullAt = 0;
@@ -946,12 +954,42 @@ function loadPrefs(){
     syncCfg.lastServerAt = Number(p.lastServerAt) || 0;
     syncCfg.lastSyncAt = Number(p.lastSyncAt) || 0;
     syncCfg.sampleDismissed = !!p.sampleDismissed;
+    syncCfg.localHash = String(p.localHash || '');
+    syncCfg.syncedHash = String(p.syncedHash || '');
   }catch(e){}
 }
 function savePrefs(){
   try{ localStorage.setItem(PREFS_KEY, JSON.stringify(syncCfg)); }catch(e){}
 }
 function syncConfigured(){ return !!(syncCfg.url && /^https?:\/\//i.test(syncCfg.url)); }
+// 상태 내용 지문(수정 시각 제외, 키 순서 무관) — 진짜 바뀌었는지 판단용
+function canonValue(v){
+  if(v === null || typeof v !== 'object') return JSON.stringify(v === undefined ? null : v);
+  if(Array.isArray(v)){
+    var arr = [];
+    for(var i = 0; i < v.length; i++) arr.push(canonValue(v[i]));
+    return '[' + arr.join(',') + ']';
+  }
+  var keys = Object.keys(v).sort(), out = [];
+  for(var k = 0; k < keys.length; k++){
+    if(keys[k] === '_savedAt') continue;
+    out.push(JSON.stringify(keys[k]) + ':' + canonValue(v[keys[k]]));
+  }
+  return '{' + out.join(',') + '}';
+}
+function stateHash(s){
+  try{
+    var str = canonValue(s || {});
+    var h = 5381;
+    for(var i = 0; i < str.length; i++){ h = ((h << 5) + h + str.charCodeAt(i)) | 0; }
+    return (h >>> 0).toString(36) + ':' + str.length;
+  }catch(e){ return 'h0'; }
+}
+function markSynced(){
+  syncCfg.syncedHash = stateHash(state);
+  syncCfg.localHash = syncCfg.syncedHash;
+  savePrefs();
+}
 function timeLabel(ms){
   var d = new Date(Number(ms) || 0);
   if(!ms || !isFinite(d.getTime())) return '';
@@ -1036,6 +1074,11 @@ function hasUserData(){
 
 function schedulePush(){
   if(!syncConfigured()) return;
+  if(state && stateHash(state) === syncCfg.syncedHash){
+    localDirty = false;
+    setSyncStatus('saved', '');
+    return;
+  }
   localDirty = true;
   setSyncStatus('saving', '');
   clearTimeout(pushTimer);
@@ -1063,6 +1106,8 @@ function syncPush(manual){
   return syncRequest('/state', { method:'PUT', body: body }).then(function(d){
     pushing = false;
     localDirty = false;
+    if(state && !state._savedAt){ state._savedAt = Date.now(); saveLocal(false); }
+    markSynced();
     syncCfg.lastServerAt = Number(d.updatedAt || 0);
     syncCfg.lastSyncAt = Date.now();
     savePrefs();
@@ -1094,11 +1139,16 @@ function syncPull(opts){
     var srvAt = srv ? Number(srv._savedAt || d.savedAt || d.updatedAt || 0) : 0;
     var localAt = Number(state && state._savedAt || 0);
     var localSample = !!(state && state._sample);
+    var localHasData = hasUserData();
     syncCfg.lastServerAt = Number(d && d.updatedAt || 0);
 
-    if(srv && (opts.force || localSample || srvAt > localAt + 1000)){
+    // 동기화를 처음 켠 기기에 이미 내 기록이 있으면(수정 시각 기록이 없음) 그 기록을 살린다
+    var firstConnectLocal = (localAt === 0 && localHasData && !localSample);
+
+    if(srv && !firstConnectLocal && (opts.force || localSample || srvAt > localAt + 1000)){
       state = normalize(srv);
       saveLocal(false);
+      markSynced();
       renderAll();
       updateSampleBanner();
       syncCfg.lastSyncAt = Date.now();
@@ -1120,7 +1170,7 @@ function syncPull(opts){
       if(opts.toast) toast('연결됐어요 · 아직 노션에 저장된 기록이 없어요');
       return false;
     }
-    if(localAt > srvAt + 1000 && !localDirty){
+    if(localAt > srvAt + 1000 && !localDirty || firstConnectLocal){
       setSyncStatus('saving', '이 기기 기록이 더 최신이라 올리는 중…');
       syncPush(false);
       if(opts.toast) toast('연결됐어요 · 이 기기 기록을 노션에 올리는 중이에요');
@@ -3343,6 +3393,7 @@ function boot(){
   $('debtExtra').value = fmt(state.debtExtra);
   renderAll();
   switchTab('money');
+  initializing = false;
   syncBooted = true;
   updateSampleBanner();
   paintSync();
