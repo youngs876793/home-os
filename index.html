@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="선둥 홈 OS" />
 <meta name="format-detection" content="telephone=no" />
-<meta name="description" content="선둥 님 전용 AI 가계부 · 집안 재고 관리. 모든 데이터는 이 브라우저에만 저장됩니다." />
+<meta name="description" content="선둥 님 전용 AI 가계부 · 집안 재고 관리. 기본은 이 브라우저에만 저장되고, 원하면 노션으로 자동 동기화할 수 있어요." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231E5631'/%3E%3Cpath d='M16 8l2.6 5.4L24 16l-5.4 2.6L16 24l-2.6-5.4L8 16l5.4-2.6z' fill='%23fff'/%3E%3C/svg%3E" />
 <style>
   *,*::before,*::after{box-sizing:border-box}
@@ -47,6 +47,26 @@
   .icon-btn{width:38px;height:38px;border-radius:13px;border:1px solid var(--line);background:#fff;
     display:grid;place-items:center;color:var(--emerald);flex:none;transition:transform .12s}
   .icon-btn:active{transform:scale(.94)}
+  .top-actions{display:flex;align-items:center;gap:7px;flex:none}
+  .sync-dot{display:none;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:999px;border:1px solid var(--line);
+    background:#fff;color:var(--muted);font-size:10.5px;font-weight:600;letter-spacing:-.02em;white-space:nowrap}
+  .sync-dot.on{display:inline-flex}
+  .sync-dot i{width:6px;height:6px;border-radius:50%;background:#B9C4BC;flex:none}
+  .sync-dot[data-state="saved"] i{background:var(--emerald)}
+  .sync-dot[data-state="saving"] i,.sync-dot[data-state="loading"] i{background:#D8A32B;animation:syncPulse 1s ease-in-out infinite}
+  .sync-dot[data-state="offline"] i{background:var(--red)}
+  @keyframes syncPulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .sample-banner{display:flex;align-items:center;gap:9px;margin:10px 15px 0;padding:10px 12px;border-radius:13px;
+    background:var(--amber-bg);color:#7B4E0C;font-size:11.5px;line-height:1.45;letter-spacing:-.02em}
+  .sample-banner[hidden]{display:none}
+  .sample-banner b{font-weight:700}
+  .sample-banner .sb-text{flex:1;min-width:0}
+  .sample-banner .sb-actions{display:flex;align-items:center;gap:5px;flex:none}
+  .sample-banner button{font-size:11.5px;font-weight:700;color:#7B4E0C;border:1px solid rgba(123,78,12,.26);
+    background:rgba(255,255,255,.65);border-radius:9px;padding:5px 9px;letter-spacing:-.02em}
+  .sample-banner button:active{background:#fff}
+  .sample-banner .sb-close{font-size:15px;line-height:1;font-weight:400;padding:3px 5px;border:none;background:none;color:#A2762F}
 
   main{padding:14px 15px 4px}
   .tab-view{display:none}
@@ -415,13 +435,24 @@
       <b><i></i>선둥 홈 OS</b>
       <span id="todayLabel">—</span>
     </div>
-    <button class="icon-btn" data-action="open-settings" aria-label="설정·백업">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9.1a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03z"/>
-      </svg>
-    </button>
+    <div class="top-actions">
+      <span class="sync-dot" id="syncDot" data-state="saved" role="status" aria-live="polite" title="노션 동기화"><i></i><span id="syncDotText">동기화됨</span></span>
+      <button class="icon-btn" data-action="open-settings" aria-label="설정·백업">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9.1a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03z"/>
+        </svg>
+      </button>
+    </div>
   </header>
+
+  <div class="sample-banner" id="sampleBanner" hidden>
+    <span class="sb-text">지금 보이는 건 <b>예시 데이터</b>예요 — 설정에서 전체 초기화하고 바로 시작할 수 있어요.</span>
+    <span class="sb-actions">
+      <button data-action="sample-reset">초기화</button>
+      <button class="sb-close" data-action="sample-dismiss" aria-label="안내 닫기">×</button>
+    </span>
+  </div>
 
   <main>
     <!-- ========== TAB 1: 돈 흐름 ========== -->
@@ -879,6 +910,11 @@ function normalize(s){
 }
 var storageOK = true;
 function save(){
+  saveLocal(true);
+  if(syncBooted) schedulePush();
+}
+function saveLocal(stamp){
+  if(stamp !== false && state){ state._savedAt = Date.now(); }
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
   catch(e){ storageOK = false; }
 }
@@ -891,8 +927,244 @@ function checkStorage(){
   return storageOK;
 }
 
+/* ============================== 노션 실시간 동기화 ============================== */
+var PREFS_KEY = 'seondung_home_os_prefs_v1';
+var syncCfg = { url:'', pin:'', lastServerAt:0, lastSyncAt:0, sampleDismissed:false };
+var syncBooted = false;
+var pumpStatus = 'off';
+var pumpNote = '';
+var pushTimer = null, retryTimer = null, pulling = false, pushing = false, pushQueued = false, localDirty = false, lastPullAt = 0;
+
+function loadPrefs(){
+  try{
+    var raw = localStorage.getItem(PREFS_KEY);
+    if(!raw) return;
+    var p = JSON.parse(raw);
+    if(!p || typeof p !== 'object') return;
+    syncCfg.url = String(p.url || '').trim().replace(/\/+$/, '');
+    syncCfg.pin = String(p.pin || '');
+    syncCfg.lastServerAt = Number(p.lastServerAt) || 0;
+    syncCfg.lastSyncAt = Number(p.lastSyncAt) || 0;
+    syncCfg.sampleDismissed = !!p.sampleDismissed;
+  }catch(e){}
+}
+function savePrefs(){
+  try{ localStorage.setItem(PREFS_KEY, JSON.stringify(syncCfg)); }catch(e){}
+}
+function syncConfigured(){ return !!(syncCfg.url && /^https?:\/\//i.test(syncCfg.url)); }
+function timeLabel(ms){
+  var d = new Date(Number(ms) || 0);
+  if(!ms || !isFinite(d.getTime())) return '';
+  if(isoOf(d) === todayISO()) return '오늘 ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function syncStatusText(){
+  if(!syncCfg.url) return '설정 전이에요 — Worker 주소를 넣으면 노션에 자동 저장돼요';
+  if(!/^https?:\/\//i.test(syncCfg.url)) return '주소는 https:// 로 시작해야 해요';
+  var base = { saved:'동기화됨', saving:'저장 중…', loading:'서버 확인 중…', offline:'오프라인', off:'대기 중' }[pumpStatus] || '대기 중';
+  var at = syncCfg.lastSyncAt ? ' · 마지막 ' + timeLabel(syncCfg.lastSyncAt) : '';
+  return base + at + (pumpNote ? ' · ' + pumpNote : '');
+}
+function paintSync(){
+  var dot = $('syncDot');
+  if(dot){
+    dot.classList.toggle('on', syncConfigured());
+    dot.setAttribute('data-state', pumpStatus);
+    dot.title = syncStatusText();
+  }
+  var txt = $('syncDotText');
+  if(txt){
+    txt.textContent = { saved:'동기화됨', saving:'저장 중', loading:'불러오는 중', offline:'오프라인', off:'대기' }[pumpStatus] || '동기화';
+  }
+  var line = $('syncStatusLine');
+  if(line) line.textContent = syncStatusText();
+}
+function setSyncStatus(st, note){
+  pumpStatus = st;
+  if(arguments.length > 1) pumpNote = note || '';
+  paintSync();
+}
+function syncErrMsg(status, data){
+  var msg = data && data.message ? String(data.message) : '';
+  var hint = data && data.hint ? String(data.hint) : '';
+  var out = msg + (hint ? ' · ' + hint : '');
+  if(out) return out.length > 110 ? out.slice(0, 108) + '…' : out;
+  if(status === 401) return '비밀번호(PIN)가 서버와 달라요';
+  if(status === 404) return '중계 서버 주소를 확인해 주세요 (404)';
+  if(status === 413) return '저장할 기록이 너무 커요';
+  if(status >= 500) return '서버 오류 (' + status + ')';
+  return '연결 실패 (' + status + ')';
+}
+function syncRequest(path, init){
+  init = init || {};
+  var base = String(syncCfg.url || '').trim().replace(/\/+$/, '');
+  if(!/^https?:\/\//i.test(base)) return Promise.reject(new Error('중계 서버 주소 형식이 올바르지 않아요'));
+  var headers = { 'Accept': 'application/json' };
+  if(syncCfg.pin) headers['X-Sync-Pin'] = syncCfg.pin;
+  var opt = { method: init.method || 'GET', headers: headers, mode: 'cors', cache: 'no-store' };
+  if(init.body){ headers['Content-Type'] = 'application/json'; opt.body = init.body; }
+  return fetch(base + path, opt).then(function(res){
+    return res.text().then(function(txt){
+      var data = null;
+      try { data = txt ? JSON.parse(txt) : null; } catch(e){ data = null; }
+      if(!res.ok) throw new Error(syncErrMsg(res.status, data));
+      if(!data || data.ok !== true) throw new Error('서버 응답을 알아볼 수 없어요 (주소 확인)');
+      return data;
+    });
+  }, function(){
+    throw new Error('서버에 연결하지 못했어요 (주소·네트워크 확인)');
+  });
+}
+function readSyncInputs(){
+  var u = $('syncUrl'), p = $('syncPin');
+  if(u){
+    var v = String(u.value || '').trim().replace(/\/+$/, '');
+    if(v && !/^https?:\/\//i.test(v) && /^[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i.test(v)) v = 'https://' + v;
+    syncCfg.url = v;
+  }
+  if(p) syncCfg.pin = String(p.value || '').trim();
+  savePrefs();
+  paintSync();
+}
+function hasUserData(){
+  if(!state) return false;
+  var w = state.workout || {};
+  return !!((state.tx && state.tx.length) || (state.bills && state.bills.length) || (state.inventory && state.inventory.length) ||
+    (state.sells && state.sells.length) || (state.docs && state.docs.length) || (state.debts && state.debts.length) ||
+    (w.weights && w.weights.length) || (w.logs && Object.keys(w.logs).length) || (w.attendance && w.attendance.length));
+}
+
+function schedulePush(){
+  if(!syncConfigured()) return;
+  localDirty = true;
+  setSyncStatus('saving', '');
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(function(){ syncPush(false); }, 1200);
+}
+function syncPush(manual){
+  if(!syncConfigured()){
+    if(manual) toast('중계 서버 주소를 먼저 넣어 주세요');
+    return Promise.resolve(false);
+  }
+  if(pushing){ pushQueued = true; return Promise.resolve(false); }
+  if(state && state._sample){
+    // 예시 데이터는 노션에 올리지 않아요 (진짜 기록을 덮어쓰지 않도록)
+    if(syncCfg.lastServerAt){ return syncPull({}); }
+    localDirty = false;
+    setSyncStatus('saved', '예시 데이터는 노션에 올리지 않아요');
+    if(manual) toast('예시 데이터는 올리지 않아요 · 초기화하고 내 기록을 넣어 주세요');
+    return Promise.resolve(false);
+  }
+  pushing = true;
+  clearTimeout(pushTimer);
+  clearTimeout(retryTimer);
+  setSyncStatus('saving', manual ? '' : '');
+  var body = JSON.stringify({ v:1, app:'seondung-home-os', client:'web', savedAt: Date.now(), state: state });
+  return syncRequest('/state', { method:'PUT', body: body }).then(function(d){
+    pushing = false;
+    localDirty = false;
+    syncCfg.lastServerAt = Number(d.updatedAt || 0);
+    syncCfg.lastSyncAt = Date.now();
+    savePrefs();
+    setSyncStatus('saved', d && d.chunks ? d.chunks + '블록으로 저장' : '');
+    if(manual) toast('노션에 저장했어요');
+    if(pushQueued){ pushQueued = false; schedulePush(); }
+    return true;
+  }).catch(function(err){
+    pushing = false;
+    setSyncStatus('offline', err && err.message ? err.message : '저장 실패');
+    if(manual) toast('저장 실패 · ' + (err && err.message ? err.message : '연결을 확인해 주세요'));
+    else {
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(function(){ if(localDirty) syncPush(false); }, 20000);
+    }
+    return false;
+  });
+}
+function syncPull(opts){
+  opts = opts || {};
+  if(!syncConfigured()) return Promise.resolve(false);
+  if(pulling) return Promise.resolve(false);
+  pulling = true;
+  setSyncStatus('loading', '');
+  return syncRequest('/state').then(function(d){
+    pulling = false;
+    lastPullAt = Date.now();
+    var srv = d && d.state && typeof d.state === 'object' ? d.state : null;
+    var srvAt = srv ? Number(srv._savedAt || d.savedAt || d.updatedAt || 0) : 0;
+    var localAt = Number(state && state._savedAt || 0);
+    var localSample = !!(state && state._sample);
+    syncCfg.lastServerAt = Number(d && d.updatedAt || 0);
+
+    if(srv && (opts.force || localSample || srvAt > localAt + 1000)){
+      state = normalize(srv);
+      saveLocal(false);
+      renderAll();
+      updateSampleBanner();
+      syncCfg.lastSyncAt = Date.now();
+      savePrefs();
+      setSyncStatus('saved', '노션 ' + timeLabel(srvAt) + ' 기록을 불러왔어요');
+      if(opts.toast) toast('노션 최신 기록을 불러왔어요');
+      return true;
+    }
+    if(!srv){
+      syncCfg.lastSyncAt = Date.now();
+      savePrefs();
+      if(!localDirty && hasUserData() && !(state && state._sample)){
+        setSyncStatus('saving', '노션에 올리는 중…');
+        syncPush(false);
+        if(opts.toast) toast('연결됐어요 · 이 기기 기록을 노션에 올리는 중이에요');
+        return false;
+      }
+      setSyncStatus('saved', '노션에 아직 저장된 기록이 없어요');
+      if(opts.toast) toast('연결됐어요 · 아직 노션에 저장된 기록이 없어요');
+      return false;
+    }
+    if(localAt > srvAt + 1000 && !localDirty){
+      setSyncStatus('saving', '이 기기 기록이 더 최신이라 올리는 중…');
+      syncPush(false);
+      if(opts.toast) toast('연결됐어요 · 이 기기 기록을 노션에 올리는 중이에요');
+      return false;
+    }
+    syncCfg.lastSyncAt = Date.now();
+    savePrefs();
+    setSyncStatus('saved', '이미 최신 상태예요');
+    if(opts.toast) toast('연결됐어요 · 이미 최신 상태예요');
+    return false;
+  }).catch(function(err){
+    pulling = false;
+    setSyncStatus('offline', err && err.message ? err.message : '연결 실패');
+    if(opts.toast) toast('연결 실패 · ' + (err && err.message ? err.message : '주소·PIN 확인'));
+    return false;
+  });
+}
+function syncTest(){
+  readSyncInputs();
+  if(!syncCfg.url){ toast('중계 서버 주소를 먼저 넣어 주세요'); return; }
+  if(!/^https?:\/\//i.test(syncCfg.url)){ toast('주소는 https:// 로 시작해야 해요'); return; }
+  setSyncStatus('loading', '연결 확인 중…');
+  syncRequest('/health').then(function(h){
+    if(h.notion === false) throw new Error('서버에 NOTION_TOKEN 이 아직 없어요');
+    if(h.pinRequired && !syncCfg.pin) throw new Error('이 서버는 PIN 이 필요해요 (앱과 같은 값을 넣어 주세요)');
+    return syncPull({ toast:true });
+  }).catch(function(err){
+    setSyncStatus('offline', err && err.message ? err.message : '연결 실패');
+    toast('연결 실패 · ' + (err && err.message ? err.message : '주소·PIN 을 확인해 주세요'));
+  });
+}
+function updateSampleBanner(){
+  var el = $('sampleBanner');
+  if(!el) return;
+  el.hidden = !(state && state._sample && !syncCfg.sampleDismissed);
+}
+
 /* ============================== 샘플 데이터 ============================== */
 function sampleState(){
+  var s = sampleStateBody();
+  s._sample = true;
+  return s;
+}
+function sampleStateBody(){
   var m = thisMonth();
   var now = new Date();
   var today = now.getDate();
@@ -2323,8 +2595,21 @@ function openSettings(){
   }).join('');
   var body = ''
     + '<div class="sheet-section">'
+    +   '<h4>노션 실시간 동기화</h4>'
+    +   '<p class="small muted" style="margin:0 0 10px">Cloudflare Worker(중계 서버)를 거쳐 노션 <b>선둥관리</b> 페이지에 자동 저장해요. 기록은 폰과 PC 어디서든 같이 보여요.</p>'
+    +   '<label class="field"><span>중계 서버 주소 (Worker URL)</span>'
+    +     '<input id="syncUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://home-os-sync.계정.workers.dev" value="' + esc(syncCfg.url) + '"></label>'
+    +   '<label class="field"><span>비밀번호 (PIN)</span>'
+    +     '<input id="syncPin" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="SYNC_PIN 값" value="' + esc(syncCfg.pin) + '"></label>'
+    +   '<button class="btn-soft" data-action="sync-test" style="margin-bottom:8px">연결 테스트 &amp; 지금 불러오기</button>'
+    +   '<button class="btn-primary" data-action="sync-now">지금 저장</button>'
+    +   '<p class="small" id="syncStatusLine" style="margin:9px 0 0;color:#5C6E62">' + esc(syncStatusText()) + '</p>'
+    +   (syncCfg.url ? '<button class="btn-soft line" data-action="sync-off" style="margin-top:8px">동기화 끄기</button>' : '')
+    +   '<p class="small muted" style="margin:8px 0 0">주소와 PIN 은 <b>이 기기 브라우저에만</b> 저장돼요. 노션에는 기록만 쌓여요.</p>'
+    + '</div>'
+    + '<div class="sheet-section">'
     +   '<h4>데이터 · 백업</h4>'
-    +   '<p class="small muted" style="margin:0 0 10px">모든 기록은 <b>이 휴대폰 브라우저 저장소(localStorage)</b>에만 있어요. 어디로도 전송되지 않아요. 운동·몸무게 기록도 함께 저장돼요.</p>'
+    +   '<p class="small muted" style="margin:0 0 10px">기록은 기본으로 <b>이 기기 브라우저 저장소(localStorage)</b>에 저장돼요. 위 노션 동기화를 켜면 노션에도 함께 저장돼요. 운동·몸무게 기록도 함께 들어가요.</p>'
     +   '<div class="btn-row"><button class="btn-soft" data-action="export-json">JSON 내보내기</button>'
     +   '<label class="btn-soft line file-btn">JSON 불러오기<input type="file" id="importFile" accept=".json,application/json"></label></div>'
     +   '<div class="btn-row"><button class="btn-soft" data-action="fill-sample">샘플 데이터 채우기</button>'
@@ -2348,9 +2633,13 @@ function openSettings(){
     +   '</ol>'
     +   '<p class="small muted" style="margin:8px 0 0">브라우저 기록·데이터를 지우면 기록도 함께 사라져요. 가끔 JSON 백업을 떠두면 안전해요.</p>'
     + '</div>';
-  openSheet('설정 · 백업', '내 데이터는 내 폰에만 저장돼요', body, function(bd){
+  openSheet('설정 · 백업', '기록은 내 폰에 저장되고, 원하면 노션과도 맞춰져요', body, function(bd){
     bindNum(bd.querySelector('#setSalaryDay'));
     bd.querySelectorAll('.budget-input').forEach(bindNum);
+    ['syncUrl','syncPin'].forEach(function(fid){
+      var el = bd.querySelector('#' + fid);
+      if(el) el.addEventListener('input', function(){ readSyncInputs(); });
+    });
     var file = bd.querySelector('#importFile');
     if(file){
       file.addEventListener('change', function(e){
@@ -2397,6 +2686,7 @@ function importJSON(text){
     save();
     closeSheet();
     renderAll();
+    updateSampleBanner();
     toast('불러왔어요 · 내역 ' + state.tx.length + '건 · 운동 ' + Object.keys(state.workout.logs).length + '일');
   } catch(e){
     toast('이 파일은 읽을 수 없어요 (JSON 형식 확인)');
@@ -2925,12 +3215,27 @@ document.addEventListener('click', function(e){
     case 'download-export': downloadExport(); break;
     case 'fill-sample':
       if(confirm('지금 기록을 지우고 샘플 데이터로 채울까요?')){
-        state = sampleState(); save(); closeSheet(); renderAll(); toast('샘플 데이터를 채웠어요');
+        state = sampleState(); save(); closeSheet(); renderAll(); updateSampleBanner(); toast('샘플 데이터를 채웠어요');
       }
       break;
     case 'reset-all':
       if(confirm('모든 기록이 지워져요. 정말 초기화할까요?')){
-        state = emptyState(); save(); closeSheet(); renderAll(); toast('초기화했어요');
+        state = emptyState(); state._sample = false; save(); closeSheet(); renderAll(); updateSampleBanner(); toast('초기화했어요');
+      }
+      break;
+    case 'sample-reset':
+      if(confirm('예시 데이터를 지우고 빈 기록으로 시작할까요?')){
+        state = emptyState(); state._sample = false; save(); renderAll(); updateSampleBanner(); toast('이제 내 기록을 넣으면 돼요');
+      }
+      break;
+    case 'sample-dismiss':
+      syncCfg.sampleDismissed = true; savePrefs(); updateSampleBanner();
+      break;
+    case 'sync-test': syncTest(); break;
+    case 'sync-now': readSyncInputs(); syncPush(true); break;
+    case 'sync-off':
+      if(confirm('노션 동기화를 끌까요? 이 기기의 기록은 그대로 남아요.')){
+        syncCfg.url = ''; syncCfg.pin = ''; savePrefs(); setSyncStatus('off', ''); openSettings(); toast('동기화를 껐어요');
       }
       break;
     case 'save-settings': saveSettingsFromSheet(); break;
@@ -3028,6 +3333,7 @@ document.addEventListener('input', function(e){
 function boot(){
   load();
   checkStorage();
+  loadPrefs();
   renderToday();
   var d = new Date();
   $('txDate').value = todayISO();
@@ -3037,7 +3343,37 @@ function boot(){
   $('debtExtra').value = fmt(state.debtExtra);
   renderAll();
   switchTab('money');
+  syncBooted = true;
+  updateSampleBanner();
+  paintSync();
+  if(syncConfigured()) syncPull({});
 }
+
+// 다른 기기에서 고친 내용을 앱으로 다시 열 때 당겨오기
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState !== 'visible') return;
+  if(!syncBooted || !syncConfigured()) return;
+  if(sheetEl || localDirty || pushing || pulling) return;
+  if(Date.now() - lastPullAt < 20000) return;
+  syncPull({});
+});
+window.addEventListener('online', function(){
+  if(!syncBooted || !syncConfigured()) return;
+  if(localDirty) syncPush(false);
+  else if(!pushing && !pulling) syncPull({});
+});
+window.addEventListener('pagehide', function(){
+  if(!syncBooted || !syncConfigured() || !localDirty || pushing) return;
+  try{
+    var body = JSON.stringify({ v:1, app:'seondung-home-os', client:'web', savedAt: Date.now(), state: state });
+    if(body.length > 55000) return;
+    var headers = { 'Content-Type': 'application/json' };
+    if(syncCfg.pin) headers['X-Sync-Pin'] = syncCfg.pin;
+    fetch(String(syncCfg.url).replace(/\/+$/, '') + '/state', {
+      method: 'PUT', headers: headers, body: body, keepalive: true, mode: 'cors'
+    });
+  }catch(e){}
+});
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape' && sheetEl) closeSheet();
 });
