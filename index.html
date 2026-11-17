@@ -286,6 +286,26 @@
     font-size:12.5px;text-align:right;outline:none;font-variant-numeric:tabular-nums;letter-spacing:-.4px}
   .dr-fields input:focus{border-color:#9FC6AD}
 
+  /* 기초자산 */
+  .asset-row{display:flex;align-items:center;gap:6px}
+  .asset-row + .asset-row{margin-top:7px}
+  .asset-row .ar-name{flex:1;min-width:0;height:36px;border-radius:10px;border:1px solid var(--line);background:#fff;padding:0 10px;
+    font-size:13px;letter-spacing:-.005em;outline:none}
+  .asset-row .ar-amt{width:106px;flex:none;height:36px;border-radius:10px;border:1px solid var(--line);background:#fff;padding:0 9px;
+    font-size:13px;text-align:right;outline:none;font-variant-numeric:tabular-nums;letter-spacing:-.4px}
+  .asset-row .ar-name:focus,.asset-row .ar-amt:focus{border-color:#9FC6AD}
+  .asset-row .ar-x{width:26px;height:26px;border-radius:9px;color:#A6B2A9;display:grid;place-items:center;font-size:15px;flex:none}
+  .asset-row .ar-x:active{background:#F4F6F3}
+  #assetFoot[hidden]{display:none}
+  .asset-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:12px;padding-top:11px;border-top:1px dashed #E3E9E1}
+  .asset-foot .af-item{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .asset-foot .af-item.right{text-align:right;align-items:flex-end}
+  .asset-foot .af-item span{font-size:10.5px;color:var(--muted);letter-spacing:-.02em}
+  .asset-foot .af-item b{font-size:17px;font-weight:700;letter-spacing:-.6px;color:#1B3A26;font-variant-numeric:tabular-nums}
+  .asset-foot .af-item b small{font-size:11px;font-weight:600;color:#7C8B80;margin-left:1px;letter-spacing:0}
+  .asset-foot .af-item b.neg{color:var(--red)}
+  .asset-note{font-size:10.5px;color:var(--muted);text-align:right;margin-top:5px;letter-spacing:-.02em}
+
   .cmp{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 10px}
   .cmp-card{border-radius:14px;padding:12px;border:1px solid var(--line);background:#FCFDFB}
   .cmp-card.win{background:var(--mint2);border-color:#CDE3D3}
@@ -469,6 +489,14 @@
       </div>
 
       <div id="moneySummary"></div>
+
+      <div class="card">
+        <div class="card-head"><h3>기초자산 · 순자산</h3><span class="hint">가진 돈 − 빚</span></div>
+        <div id="assetList"></div>
+        <button class="btn-soft line" data-action="add-asset" style="margin-top:10px">+ 기초자산 추가</button>
+        <div id="assetFoot" hidden></div>
+      </div>
+
       <div class="card">
         <div class="card-head"><h3>카테고리 목표</h3><span class="hint">변동지출 기준</span></div>
         <div id="moneyCats"></div>
@@ -795,6 +823,7 @@ function emptyState(){
     tx: [],
     bills: [],
     debts: [],
+    assets: [],
     debtExtra: 100000,
     inventory: [],
     sells: [],
@@ -903,6 +932,12 @@ function normalize(s){
   ['tx','bills','inventory','sells','docs','chores','debts'].forEach(function(k){
     if(!Array.isArray(out[k])) out[k] = [];
   });
+  // 기초자산은 이름·금액 두 칸만 있는 단순 목록 (예전 기록에는 없으니 빈 배열로)
+  out.assets = Array.isArray(s.assets) ? s.assets.filter(function(a){
+    return a && typeof a === 'object';
+  }).map(function(a){
+    return {name: String(a.name == null ? '' : a.name), amount: Math.max(0, Math.round(num(a.amount)))};
+  }) : [];
   out.workout = normalizeWorkout(s.workout);
   if(typeof out.debtExtra !== 'number') out.debtExtra = 100000;
   if(!out.choreWeek) out.choreWeek = weekKey(new Date());
@@ -1078,6 +1113,7 @@ function hasUserData(){
   if(!state) return false;
   var w = state.workout || {};
   return !!((state.tx && state.tx.length) || (state.bills && state.bills.length) || (state.inventory && state.inventory.length) ||
+    (state.assets && state.assets.some(function(a){ return a && (num(a.amount) > 0 || String(a.name || '').trim()); })) ||
     (state.sells && state.sells.length) || (state.docs && state.docs.length) || (state.debts && state.debts.length) ||
     (w.weights && w.weights.length) || (w.logs && Object.keys(w.logs).length) || (w.attendance && w.attendance.length));
 }
@@ -1250,6 +1286,12 @@ function sampleStateBody(){
   ];
   s.debtExtra = 100000;
 
+  s.assets = [
+    {name:'입출금·현금', amount:1250000},
+    {name:'예·적금',     amount:4800000},
+    {name:'투자',        amount:2100000}
+  ];
+
   s.tx = [
     {id:uid('t'), date:day(1),  type:'fixed',    category:'월세',   amount:550000, memo:'자동이체', billId:'b1'},
     {id:uid('t'), date:day(5),  type:'fixed',    category:'통신비', amount:43000,  memo:'자동이체', billId:'b2'},
@@ -1404,6 +1446,48 @@ function catRows(mk){
     .sort(function(a,b){ return (b.spent/b.budget||0) - (a.spent/a.budget||0); });
 }
 
+/* ============================== 렌더: 기초자산 ============================== */
+function assetTotal(){
+  return (state.assets || []).reduce(function(a, x){ return a + num(x && x.amount); }, 0);
+}
+function debtTotal(){
+  return (state.debts || []).reduce(function(a, x){ return a + Math.max(0, num(x && x.balance)); }, 0);
+}
+function renderAssets(){
+  var list = Array.isArray(state.assets) ? state.assets : (state.assets = []);
+  var html = '';
+  list.forEach(function(a, i){
+    html += '<div class="asset-row">'
+      + '<input class="ar-name" data-i="' + i + '" value="' + esc(a.name) + '" placeholder="예: 입출금·현금" autocomplete="off">'
+      + '<input class="ar-amt" data-i="' + i + '" inputmode="numeric" value="' + (num(a.amount) ? fmt(a.amount) : '') + '" placeholder="0" autocomplete="off">'
+      + '<button class="ar-x" data-action="del-asset" data-i="' + i + '" aria-label="삭제">×</button>'
+      + '</div>';
+  });
+  if(!list.length){
+    html = '<div class="empty" style="padding:12px 6px"><b>아직 비어 있어요</b>가진 돈을 한 줄씩 적으면 순자산이 바로 보여요</div>';
+  }
+  $('assetList').innerHTML = html;
+  renderAssetFoot();
+}
+function renderAssetFoot(){
+  var el = $('assetFoot');
+  if(!el) return;
+  var total = assetTotal(), debt = debtTotal(), net = total - debt;
+  if(!total && !debt){ el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  var html = '<div class="asset-foot">'
+    + '<div class="af-item"><span>기초자산 합계</span><b>' + fmt(total) + '<small>원</small></b></div>';
+  if(debt > 0){
+    html += '<div class="af-item right"><span>순자산</span><b class="' + (net < 0 ? 'neg' : '') + '">'
+      + fmt(net) + '<small>원</small></b></div>';
+  }
+  html += '</div>';
+  if(debt > 0){
+    html += '<div class="asset-note">순자산 = 기초자산 합계 − 빚 ' + won(debt) + '</div>';
+  }
+  el.innerHTML = html;
+}
+
 /* ============================== 렌더: 공통 ============================== */
 function renderToday(){
   var d = new Date();
@@ -1448,6 +1532,8 @@ function renderMoney(){
     html += '<div class="hint-note">아직 안 나간 고정비 <b>' + s.unpaid.length + '건 ' + won(s.unpaidSum) + '</b>은 남은 돈에서 미리 빼뒀어요.</div>';
   }
   $('moneySummary').innerHTML = html;
+
+  renderAssets();
 
   // 카테고리
   var rows = catRows(mk);
@@ -1764,6 +1850,10 @@ function promptList(){
   var mk = ui.month;
   var d = diagnostics();
   var s = d.s;
+  var assetSum = assetTotal(), debtSum = debtTotal();
+  var assetLine = (assetSum > 0 || debtSum > 0)
+    ? '· 기초자산 ' + won(assetSum) + ', 순자산(기초자산−빚) ' + won(assetSum - debtSum) + '\n'
+    : '· 기초자산: 아직 안 적음\n';
   var catText = d.rows.filter(function(r){ return r.spent > 0; }).map(function(r){
     return r.cat + ' ' + won(r.spent) + (r.budget > 0 ? '(목표 ' + won(r.budget) + ')' : '');
   }).join(', ') || '아직 없음';
@@ -1782,6 +1872,7 @@ function promptList(){
        + '· 고정지출: ' + won(s.fixed + s.unpaidSum) + ' (월급의 ' + Math.round(d.fixedRatio) + '%)\n'
        + '· 저축: ' + won(s.saving) + ' (' + Math.round(d.saveRate) + '%)\n'
        + '· 변동지출: ' + won(s.variable) + ' (오늘 ' + d.elapsed + '일 기준)\n'
+       + assetLine
        + '· 1인 가구, 서울 거주\n\n'
        + '1) 내 소비 구조를 3줄로 진단해줘 (좋은 점 / 위험한 점 / 지금 당장 손볼 것)\n'
        + '2) 1인 가구 기준 적정 비율과 내 위치를 % 로 비교해줘\n'
@@ -1823,7 +1914,7 @@ function promptList(){
        + '숫자 표로 정리해줘.'},
 
     {id:'p6', title:'6. 빚 갚는 순서 정하기',
-     text:'내 빚 목록이야.\n' + debtText + '\n매달 추가로 ' + won(state.debtExtra) + '을 더 갚을 수 있어.\n\n'
+     text:'내 빚 목록이야.\n' + debtText + '\n' + assetLine + '매달 추가로 ' + won(state.debtExtra) + '을 더 갚을 수 있어.\n\n'
        + '1) 눈사태(고금리 우선)와 눈덩이(소액 우선)로 각각 몇 개월, 이자 얼마인지 계산해줘\n'
        + '2) 나한테 맞는 쪽을 하나 골라서 이유를 2줄로\n'
        + '3) 갚는 순서를 표로 (순서 / 빚 이름 / 그때 갚을 금액)\n'
@@ -2720,7 +2811,7 @@ function exportJSON(){
     + '<textarea class="ta" id="exportArea" readonly>' + esc(data) + '</textarea>'
     + '<div class="btn-row" style="margin-top:10px"><button class="btn-soft" data-action="copy-export">클립보드 복사</button>'
     + '<button class="btn-soft line" data-action="download-export">파일로 저장</button></div>';
-  openSheet('JSON 내보내기', (state.tx.length + '건 내역 · ' + state.inventory.length + '개 물건 · 몸무게 '
+  openSheet('JSON 내보내기', (state.tx.length + '건 내역 · 기초자산 ' + (state.assets || []).length + '개 · ' + state.inventory.length + '개 물건 · 몸무게 '
     + state.workout.weights.length + '건 · 운동기록 ' + Object.keys(state.workout.logs).length + '일'), body);
 }
 
@@ -3123,6 +3214,15 @@ document.addEventListener('click', function(e){
       save(); renderDebts(); break;
     case 'del-debt':
       state.debts.splice(Number(btn.dataset.i), 1); save(); renderDebts(); break;
+    case 'add-asset':
+      if(!Array.isArray(state.assets)) state.assets = [];
+      state.assets.push({name:'', amount:0});
+      save(); renderAssets();
+      var names = $('assetList').querySelectorAll('.ar-name');
+      if(names.length) names[names.length - 1].focus();
+      break;
+    case 'del-asset':
+      state.assets.splice(Number(btn.dataset.i), 1); save(); renderAssets(); break;
     case 'copy-prompt':
       var pl = promptList().filter(function(x){ return x.id === id; })[0];
       if(pl) copyText(pl.text, '프롬프트를 복사했어요');
@@ -3356,6 +3456,19 @@ document.addEventListener('input', function(e){
   if(t.classList && t.classList.contains('debt-name')){
     var j = Number(t.dataset.i);
     if(state.debts[j]){ state.debts[j].name = t.value; save(); }
+  }
+  if(t.classList && (t.classList.contains('ar-name') || t.classList.contains('ar-amt'))){
+    var ai = Number(t.dataset.i);
+    if(!state.assets || !state.assets[ai]) return;
+    if(t.classList.contains('ar-name')){
+      state.assets[ai].name = t.value;
+    } else {
+      var amtA = Math.max(0, Math.round(num(t.value)));
+      state.assets[ai].amount = amtA;
+      t.value = amtA ? fmt(amtA) : '';
+      renderAssetFoot();
+    }
+    save();
   }
   if(t.id === 'debtExtra'){ state.debtExtra = num(t.value); save(); computeDebt(); }
   if(t.id === 'txAmount' || t.id === 'debtExtra' || t.classList.contains('debt-pay') || t.classList.contains('debt-bal')){
