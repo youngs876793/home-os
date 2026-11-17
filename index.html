@@ -2976,10 +2976,12 @@ function commitImport(){
 /* ---------- 노션 「선둥관리」 표에서 가져오기 ---------- */
 var notionImportBusy = false;
 // 같은 내역 판별용 키: 날짜 + 타입 + 금액 (+ 메모 전체 또는 메모 첫마디=내용)
+// 예전에 가져온 기록은 공백이 여러 칸인 경우가 있어 공백을 하나로 맞춰 비교합니다.
+function txKeyText(v){ return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
 function txMatchKey(t, loose){
-  var memo = String((t && t.memo) || '');
+  var memo = txKeyText(t && t.memo);
   var head = loose ? memo.split(' · ')[0] : memo;
-  return [String((t && t.date) || ''), String((t && t.type) || ''), Math.round(num(t && t.amount)), head].join('|');
+  return [txKeyText(t && t.date), txKeyText(t && t.type), Math.round(num(t && t.amount)), head].join('|');
 }
 function mergeNotionRows(rows){
   var strong = {}, loose = {};
