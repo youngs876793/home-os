@@ -163,8 +163,15 @@
   .btn-mini:active{opacity:.8}
 
   /* transaction list */
-  .tx-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F1F4F0}
+  .tx-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F1F4F0;cursor:pointer}
+  .tx-row:active{background:#FAFBF9}
   .tx-row:last-child{border-bottom:none;padding-bottom:2px}
+  .tx-edit-hint{margin-left:2px;color:#C3CDC5;font-size:16px;line-height:1;flex:none}
+  .chips.tx-filter{margin:2px 0 6px;padding-bottom:8px}
+  .chips.tx-filter .chip-div{flex:none;width:1px;height:18px;background:#E3E9E2;margin:7px 2px 0}
+  .filter-sum{font-size:11.5px;color:var(--muted);letter-spacing:-.02em;margin:0 0 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .filter-sum b{color:#3D4F44;font-weight:600}
+  .filter-sum button{font-size:11.5px;color:var(--green);font-weight:600;text-decoration:underline;letter-spacing:-.02em}
   .tx-left{flex:1;min-width:0}
   .tx-left b{display:block;font-size:13.5px;letter-spacing:-.01em;color:#20372A;font-weight:600}
   .tx-left span{display:block;font-size:11px;color:var(--muted);margin-top:1px;letter-spacing:-.02em;
@@ -528,6 +535,8 @@
 
       <div class="card">
         <div class="card-head"><h3>최근 내역</h3><span class="hint" id="txCountHint"></span></div>
+        <div class="chips tx-filter" id="txFilters"></div>
+        <div class="filter-sum" id="txFilterSum"></div>
         <div id="moneyList"></div>
       </div>
 
@@ -748,6 +757,7 @@ function uid(p){ return (p||'id') + '_' + Math.random().toString(36).slice(2,9);
 function num(v){ var n = Number(String(v==null?'':v).replace(/[^0-9.\-]/g,'')); return isFinite(n)?n:0; }
 function fmt(n){ return Math.round(Number(n)||0).toLocaleString('ko-KR'); }
 function won(n){ return fmt(n) + '원'; }
+function txLabel(t){ return (t && (t.categoryLabel || t.category)) || '기타'; }
 function sum(list, f){ return list.reduce(function(s,x){ return s + (f ? f(x) : (typeof x === 'number' ? x : num(x.amount))); }, 0); }
 function isoOf(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
 function todayISO(){ return isoOf(new Date()); }
@@ -808,7 +818,8 @@ var ui = {
   stockZone: '전체',
   stockQuery: '',
   showAllTx: false,
-  txType: 'variable'
+  txType: 'variable',
+  txFilter: {type:'', cat:''}
 };
 var state = null;
 var lastDeletedTx = null;
@@ -1555,22 +1566,72 @@ function renderMoney(){
   }
   $('moneyCats').innerHTML = cHtml;
 
-  // 최근 내역
-  var list = txOfMonth(mk).slice().sort(function(a,b){
+  // 최근 내역 · 분류 필터
+  var monthTx = txOfMonth(mk);
+  var fType = ui.txFilter.type || '';
+  var fCat = ui.txFilter.cat || '';
+  if(fCat && !monthTx.some(function(t){ return txLabel(t) === fCat; })) fCat = ui.txFilter.cat = '';
+
+  var typeChips = '';
+  [{v:'', label:'전체'}].concat(Object.keys(TYPES).map(function(k){ return {v:k, label:TYPES[k].label}; })).forEach(function(o){
+    var n = o.v ? monthTx.filter(function(t){ return t.type === o.v; }).length : monthTx.length;
+    typeChips += '<button class="chip' + (fType === o.v ? ' on' : '') + '" data-action="filter-type" data-type="' + o.v + '">'
+      + o.label + '<i>' + n + '</i></button>';
+  });
+  var catChips = '';
+  if(fType){
+    var ofType = monthTx.filter(function(t){ return t.type === fType; });
+    var labels = [];
+    ofType.forEach(function(t){ var l = txLabel(t); if(labels.indexOf(l) < 0) labels.push(l); });
+    labels.sort(function(a,b){ return String(a).localeCompare(String(b), 'ko'); });
+    if(labels.length > 1){
+      catChips += '<span class="chip-div"></span>'
+        + '<button class="chip' + (fCat === '' ? ' on' : '') + '" data-action="filter-cat" data-cat="">분류 전체<i>' + ofType.length + '</i></button>';
+      labels.forEach(function(l){
+        var n = ofType.filter(function(t){ return txLabel(t) === l; }).length;
+        catChips += '<button class="chip' + (fCat === l ? ' on' : '') + '" data-action="filter-cat" data-cat="' + esc(l) + '">'
+          + esc(l) + '<i>' + n + '</i></button>';
+      });
+    }
+  }
+  $('txFilters').innerHTML = typeChips + catChips;
+
+  var filtered = monthTx.filter(function(t){
+    if(fType && t.type !== fType) return false;
+    if(fCat && txLabel(t) !== fCat) return false;
+    return true;
+  });
+  var fInc = sum(filtered.filter(function(t){ return t.type === 'income'; }));
+  var fOut = sum(filtered.filter(function(t){ return t.type !== 'income'; }));
+  var sumLine = '';
+  if(!filtered.length){
+    sumLine = '조건에 맞는 내역이 없어요'
+      + (fType || fCat ? ' <button data-action="filter-clear">필터 해제</button>' : '');
+  } else {
+    sumLine = '<b>' + filtered.length + '건</b> · ' + (fType
+      ? (fType === 'income' ? '수입 합계 +' + fmt(fInc) + '원' : TYPES[fType].label + ' 합계 ' + fmt(fOut) + '원')
+      : '수입 +' + fmt(fInc) + '원 · 지출 ' + fmt(fOut) + '원');
+    if(fType || fCat) sumLine += ' <button data-action="filter-clear">필터 해제</button>';
+  }
+  $('txFilterSum').innerHTML = sumLine;
+  $('txCountHint').textContent = filtered.length ? (filtered.length + '건') : '';
+
+  var list = filtered.slice().sort(function(a,b){
     if(a.date === b.date) return 0;
     return a.date < b.date ? 1 : -1;
   });
-  $('txCountHint').textContent = list.length ? (list.length + '건') : '';
   var limited = ui.showAllTx ? list : list.slice(0, 6);
   var lHtml = '';
   if(!list.length){
-    lHtml = '<div class="empty"><b>기록이 비어 있어요</b>위에서 한 건만 넣어도 이 화면이 채워져요</div>';
+    lHtml = monthTx.length
+      ? '<div class="empty"><b>이 조건에는 내역이 없어요</b>위의 전체나 다른 분류를 눌러 보세요</div>'
+      : '<div class="empty"><b>기록이 비어 있어요</b>위에서 한 건만 넣어도 이 화면이 채워져요</div>';
   } else {
     limited.forEach(function(t){
-      var label = t.categoryLabel || t.category;
-      lHtml += '<div class="tx-row">'
-        + '<div class="tx-left"><b>' + esc(label) + '</b><span>' + fmtMD(t.date) + (t.memo ? ' · ' + esc(t.memo) : '') + '</span></div>'
+      lHtml += '<div class="tx-row" data-action="edit-tx" data-id="' + t.id + '" title="눌러서 수정">'
+        + '<div class="tx-left"><b>' + esc(txLabel(t)) + '</b><span>' + fmtMD(t.date) + (t.memo ? ' · ' + esc(t.memo) : '') + '</span></div>'
         + '<b class="tx-amt num ' + t.type + '">' + TYPES[t.type].sign + fmt(t.amount) + '</b>'
+        + '<span class="tx-edit-hint" aria-hidden="true">›</span>'
         + '<button class="tx-del" data-action="del-tx" data-id="' + t.id + '" aria-label="삭제">×</button>'
         + '</div>';
     });
@@ -2707,6 +2768,82 @@ function deleteTx(id){
   });
 }
 
+/* ---------- 기존 내역 수정 ---------- */
+function findTx(id){
+  return state.tx.filter(function(t){ return t.id === id; })[0] || null;
+}
+function catOptions(type, current){
+  var list = (CATS[type] || []).slice();
+  if(current && list.indexOf(current) < 0) list.unshift(current);
+  return list.map(function(c){
+    return '<option value="' + esc(c) + '"' + (c === current ? ' selected' : '') + '>' + esc(c) + '</option>';
+  }).join('');
+}
+function openTxEdit(id){
+  var t = findTx(id);
+  if(!t) return;
+  var body = ''
+    + '<div class="seg" id="etTypeSeg">'
+    +   Object.keys(TYPES).map(function(k){
+          return '<button type="button" data-etype="' + k + '"' + (t.type === k ? ' class="on"' : '') + '>'
+            + TYPES[k].label + '</button>';
+        }).join('')
+    + '</div>'
+    + '<label class="field" style="margin-top:10px"><span>분류</span><select id="etCat">' + catOptions(t.type, t.category) + '</select></label>'
+    + '<div class="row2">'
+    +   '<label class="field"><span>날짜</span><input id="etDate" type="date" value="' + esc(t.date) + '"></label>'
+    +   '<label class="field"><span>금액</span><input id="etAmount" class="num" inputmode="numeric" value="' + fmt(t.amount) + '"><span class="unit">원</span></label>'
+    + '</div>'
+    + '<label class="field"><span>내용·메모</span><input id="etMemo" value="' + esc(t.memo || '') + '" placeholder="예: 이마트 장보기"></label>'
+    + (t.categoryLabel && t.categoryLabel !== t.category
+        ? '<p class="small muted" style="margin:0 0 10px">노션 원본 분류 표시: <b>' + esc(t.categoryLabel) + '</b> · 분류를 바꾸면 표시도 함께 정리돼요</p>' : '')
+    + '<button class="btn-primary" data-action="edit-tx-save" data-id="' + esc(id) + '">저장</button>'
+    + '<button class="btn-soft line" data-action="edit-tx-del" data-id="' + esc(id) + '" style="margin-top:8px">이 내역 삭제</button>';
+  openSheet('내역 수정', '고치면 노션에도 바로 반영돼요', body, function(bd){
+    var type = t.type;
+    var seg = bd.querySelector('#etTypeSeg');
+    var catSel = bd.querySelector('#etCat');
+    var amt = bd.querySelector('#etAmount');
+    if(amt) bindNum(amt);
+    if(seg){
+      seg.addEventListener('click', function(e){
+        var b = e.target.closest('[data-etype]');
+        if(!b) return;
+        type = b.dataset.etype;
+        seg.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x === b); });
+        bd.dataset.editType = type;
+        var keep = catSel.value;
+        var list = CATS[type] || [];
+        catSel.innerHTML = catOptions(type, list.indexOf(keep) >= 0 ? keep : list[0]);
+      });
+    }
+    bd.dataset.editType = t.type;
+  });
+}
+function saveTxEdit(id){
+  var t = findTx(id);
+  if(!t) return;
+  var type = (sheetEl && sheetEl.dataset.editType) || t.type;
+  var cat = $('etCat') ? $('etCat').value : t.category;
+  var date = $('etDate') ? $('etDate').value : t.date;
+  var amount = Math.abs(Math.round(num($('etAmount') ? $('etAmount').value : t.amount)));
+  var memo = $('etMemo') ? String($('etMemo').value).trim() : (t.memo || '');
+  if(!date){ toast('날짜를 넣어 주세요'); return; }
+  if(!amount){ toast('금액을 0원보다 크게 넣어 주세요'); return; }
+  if(cat !== t.category) delete t.categoryLabel;
+  t.type = TYPES[type] ? type : t.type;
+  t.category = cat;
+  t.date = date;
+  t.amount = amount;
+  t.memo = memo;
+  save();
+  closeSheet();
+  ui.month = monthOf(date);
+  ui.showAllTx = false;
+  renderAll();
+  toast('내역을 수정했어요');
+}
+
 function addWeight(){
   var raw = String($('wtKg').value).replace(',', '.').trim();
   var kg = parseFloat(raw);
@@ -3275,6 +3412,35 @@ document.addEventListener('click', function(e){
     case 'month-next': ui.month = shiftMonth(ui.month, 1); ui.showAllTx = false; renderMoney(); break;
     case 'add-tx': addTx(); break;
     case 'del-tx': deleteTx(id); break;
+    case 'edit-tx': openTxEdit(id); break;
+    case 'edit-tx-save': saveTxEdit(id); break;
+    case 'edit-tx-del':
+      var target = findTx(id);
+      if(target){
+        state.tx = state.tx.filter(function(t){ return t.id !== id; });
+        save(); closeSheet(); renderAll();
+        toast('내역을 지웠어요', '되돌리기', function(){
+          state.tx.push(target); save(); renderAll();
+        });
+      }
+      break;
+    case 'filter-type':
+      ui.txFilter.type = btn.dataset.type || '';
+      ui.txFilter.cat = '';
+      ui.showAllTx = false;
+      renderMoney();
+      break;
+    case 'filter-cat':
+      ui.txFilter.cat = btn.dataset.cat || '';
+      ui.showAllTx = false;
+      renderMoney();
+      break;
+    case 'filter-clear':
+      ui.txFilter.type = '';
+      ui.txFilter.cat = '';
+      ui.showAllTx = false;
+      renderMoney();
+      break;
     case 'toggle-all-tx': ui.showAllTx = !ui.showAllTx; renderMoney(); break;
     case 'toggle-bill': toggleBill(id); break;
     case 'add-bill': openBillForm(null); break;
