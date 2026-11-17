@@ -523,6 +523,7 @@
         </label>
         <button class="btn-primary" data-action="add-tx">기록 추가</button>
         <button class="btn-soft line" data-action="open-import" style="margin-top:8px">엑셀·카드내역 일괄 가져오기</button>
+        <button class="btn-soft line" data-action="import-notion" style="margin-top:6px">노션 표에서 가져오기</button>
       </div>
 
       <div class="card">
@@ -734,7 +735,7 @@ var TYPES = {
 };
 var CATS = {
   income:  ['급여','부수입','이자·배당','기타수입'],
-  fixed:   ['월세','관리비','통신비','구독','보험','카드값','기타고정'],
+  fixed:   ['월세','관리비','통신비','구독','보험','카드값','부모님 생활비','기타고정'],
   variable:['식비','교통','생활','취미','미용','의료','기타'],
   saving:  ['적금','비상금','투자']
 };
@@ -2972,6 +2973,82 @@ function commitImport(){
   toast(added + '건 등록했어요' + (dup ? ' (중복 ' + dup + '건 제외)' : ''));
 }
 
+/* ---------- 노션 「선둥관리」 표에서 가져오기 ---------- */
+var notionImportBusy = false;
+// 같은 내역 판별용 키: 날짜 + 타입 + 금액 (+ 메모 전체 또는 메모 첫마디=내용)
+function txMatchKey(t, loose){
+  var memo = String((t && t.memo) || '');
+  var head = loose ? memo.split(' · ')[0] : memo;
+  return [String((t && t.date) || ''), String((t && t.type) || ''), Math.round(num(t && t.amount)), head].join('|');
+}
+function mergeNotionRows(rows){
+  var strong = {}, loose = {};
+  function add(map, k){ map[k] = (map[k] || 0) + 1; }
+  function take(map, k){ if(map[k] > 0){ map[k] -= 1; return true; } return false; }
+  state.tx.forEach(function(t){ add(strong, txMatchKey(t, false)); add(loose, txMatchKey(t, true)); });
+  var fresh = [], dup = 0;
+  rows.forEach(function(r){
+    var cand = { date: r.date, type: r.type, amount: r.amount, memo: r.memo };
+    var sk = txMatchKey(cand, false), lk = txMatchKey(cand, true);
+    if(take(strong, sk)){ take(loose, lk); dup++; return; }
+    if(take(loose, lk)){ dup++; return; }
+    var row = {
+      id: uid('t'),
+      date: String(r.date || ''),
+      type: TYPES[r.type] ? r.type : 'variable',
+      category: String(r.category || '기타'),
+      amount: Math.abs(Math.round(num(r.amount))),
+      memo: String(r.memo || ''),
+      imported: true
+    };
+    if(r.categoryLabel) row.categoryLabel = String(r.categoryLabel);
+    fresh.push(row);
+    add(strong, sk); add(loose, lk);
+  });
+  if(fresh.length){
+    state.tx = state.tx.concat(fresh);
+    state._sample = false;
+    save();
+  }
+  return {added: fresh.length, dup: dup, fresh: fresh};
+}
+function importNotionTable(){
+  if(notionImportBusy) return;
+  if(!syncConfigured()){
+    toast('노션 동기화 설정이 먼저 필요해요', '설정 열기', function(){ openSettings(); });
+    return;
+  }
+  if(state && state._sample){
+    toast('예시 데이터 상태예요 · 설정에서 전체 초기화 후 가져와 주세요');
+    return;
+  }
+  notionImportBusy = true;
+  toast('노션 표를 읽는 중…');
+  syncRequest('/import-notion-table', {method:'GET'}).then(function(d){
+    notionImportBusy = false;
+    var rows = Array.isArray(d && d.rows) ? d.rows : [];
+    var c = (d && d.counts) || {};
+    var transferSkip = Number(c.transferSkipped || 0);
+    var res = mergeNotionRows(rows);
+    var why = [];
+    if(res.dup) why.push('중복 ' + res.dup + '건');
+    if(transferSkip) why.push('이체 ' + transferSkip + '건');
+    var tail = why.length ? ' (' + why.join('·') + ' 제외)' : '';
+    if(res.added){
+      var last = res.fresh[res.fresh.length - 1];
+      ui.month = monthOf(last.date);
+      ui.showAllTx = false;
+      renderAll();
+      toast('노션 표에서 새 내역 ' + res.added + '건을 가져왔어요' + tail);
+    } else {
+      toast('노션 표에 새 내역이 없어요' + tail);
+    }
+  }).catch(function(err){
+    notionImportBusy = false;
+    toast('가져오지 못했어요 · ' + (err && err.message ? err.message : '연결을 확인해 주세요'));
+  });
+}
+
 /* ============================== 시트: 청구서 ============================== */
 function openBillForm(id){
   var b = id ? state.bills.filter(function(x){ return x.id === id; })[0] : null;
@@ -3207,6 +3284,7 @@ document.addEventListener('click', function(e){
       save(); closeSheet(); renderMoney(); toast('청구서를 지웠어요');
       break;
     case 'open-import': openImport(); break;
+    case 'import-notion': importNotionTable(); break;
     case 'imp-preview': previewImport(); break;
     case 'imp-commit': commitImport(); break;
     case 'add-debt':
