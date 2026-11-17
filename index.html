@@ -1755,6 +1755,9 @@ function renderAI(){
 
   if(s.income <= 0){
     line('warn', '!', '<b>이번 달 수입이 아직 없어요.</b> 수입을 먼저 넣으면 진단이 정확해져요.');
+  } else if(s.income < (s.fixed + s.variable + s.saving) * 0.3){
+    // 월급일 전이라 수입이 아직 조금인 달: 비율이 수백·수천%로 보여 사실과 다릅니다
+    line('warn', '·', '<b>이 달은 아직 수입이 ' + won(s.income) + '뿐이라</b> 고정비 비중·저축률이 실제보다 크게 보여요. 월급이 들어오면 비율이 제자리를 찾아요.');
   } else if(d.fixedRatio > 55){
     line('bad', '!', '<b>고정비가 월급의 ' + Math.round(d.fixedRatio) + '%</b>예요. 월급의 절반을 넘으면 변동지출을 아무리 줄여도 남는 게 없어요. 구독·통신비처럼 매달 새는 작은 자동이체부터 하나씩 정리해 보세요.');
   } else if(d.fixedRatio > 45){
